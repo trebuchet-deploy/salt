@@ -14,6 +14,7 @@ client applications.
     http://docs.saltstack.com/ref/clients/index.html
 
 '''
+from __future__ import absolute_import
 # Import Python libs
 import os
 
@@ -61,7 +62,8 @@ class APIClient(object):
         self.event = salt.utils.event.get_event(
                 'master',
                 self.opts['sock_dir'],
-                self.opts['transport'])
+                self.opts['transport'],
+                opts=self.opts)
 
     def run(self, cmd):
         '''
@@ -249,7 +251,7 @@ class APIClient(object):
         {
             'token': 'tokenstring',
             'start': starttimeinfractionalseconds,
-            'expire': expiretimeinfactionalseconds,
+            'expire': expiretimeinfractionalseconds,
             'name': 'usernamestring',
             'user': 'usernamestring',
             'username': 'usernamestring',

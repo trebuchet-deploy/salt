@@ -2,6 +2,7 @@
 '''
 Module for gathering disk information
 '''
+from __future__ import absolute_import
 
 # Import python libs
 import logging
@@ -12,6 +13,7 @@ import re
 import salt.utils
 
 from salt.exceptions import CommandExecutionError
+from salt.ext.six.moves import zip
 
 log = logging.getLogger(__name__)
 
@@ -54,7 +56,7 @@ def usage(args=None):
         salt '*' disk.usage
     '''
     flags = _clean_flags(args, 'disk.usage')
-    if not os.path.isfile('/etc/mtab'):
+    if not os.path.isfile('/etc/mtab') and __grains__['kernel'] == 'Linux':
         log.warn('df cannot run without /etc/mtab')
         if __grains__.get('virtual_subtype') == 'LXC':
             log.warn('df command failed and LXC detected. If you are running '
@@ -70,7 +72,7 @@ def usage(args=None):
     if flags:
         cmd += ' -{0}'.format(flags)
     ret = {}
-    out = __salt__['cmd.run'](cmd).splitlines()
+    out = __salt__['cmd.run'](cmd, python_shell=False).splitlines()
     for line in out:
         if not line:
             continue
@@ -117,11 +119,11 @@ def inodeusage(args=None):
         salt '*' disk.inodeusage
     '''
     flags = _clean_flags(args, 'disk.inodeusage')
-    cmd = 'df -i'
+    cmd = 'df -iP'
     if flags:
         cmd += ' -{0}'.format(flags)
     ret = {}
-    out = __salt__['cmd.run'](cmd).splitlines()
+    out = __salt__['cmd.run'](cmd, python_shell=False).splitlines()
     for line in out:
         if line.startswith('Filesystem'):
             continue
@@ -170,7 +172,7 @@ def percent(args=None):
     else:
         cmd = 'df'
     ret = {}
-    out = __salt__['cmd.run'](cmd).splitlines()
+    out = __salt__['cmd.run'](cmd, python_shell=False).splitlines()
     for line in out:
         if not line:
             continue
@@ -210,7 +212,7 @@ def blkid(device=None):
         args = " " + device
 
     ret = {}
-    for line in __salt__['cmd.run_stdout']('blkid' + args).split('\n'):
+    for line in __salt__['cmd.run_stdout']('blkid' + args, python_shell=False).split('\n'):
         comps = line.split()
         device = comps[0][:-1]
         info = {}

@@ -8,6 +8,8 @@ References:
 '''
 
 # Import python libs
+from __future__ import absolute_import
+import salt.ext.six as six
 import functools
 import logging
 import os.path
@@ -123,6 +125,7 @@ _DEB_CONFIG_PPPOE_OPTS = {
     'persist': 'persist',
     'mtu': 'mtu',
     'noaccomp': 'noaccomp',
+    'linkname': 'linkname',
 }
 
 _DEB_ROUTES_FILE = '/etc/network/routes'
@@ -257,7 +260,7 @@ def _parse_current_network_settings():
     opts['networking'] = ''
 
     if os.path.isfile(_DEB_NETWORKING_FILE):
-        with open(_DEB_NETWORKING_FILE) as contents:
+        with salt.utils.fopen(_DEB_NETWORKING_FILE) as contents:
             for line in contents:
                 if line.startswith('#'):
                     continue
@@ -395,7 +398,7 @@ DEBIAN_ATTR_TO_SALT_ATTR_MAP = dict(
 DEBIAN_ATTR_TO_SALT_ATTR_MAP['address'] = 'address'
 DEBIAN_ATTR_TO_SALT_ATTR_MAP['hwaddress'] = 'hwaddress'
 
-IPV4_VALID_PROTO = ['bootp', 'dhcp', 'static', 'manual', 'loopback']
+IPV4_VALID_PROTO = ['bootp', 'dhcp', 'static', 'manual', 'loopback', 'ppp']
 
 IPV4_ATTR_MAP = {
     'proto': __within(IPV4_VALID_PROTO, dtype=str),
@@ -405,7 +408,7 @@ IPV4_ATTR_MAP = {
     'broadcast': __ipv4_quad,
     'metric':  __int,
     'gateway':  __ipv4_quad,  # supports a colon-delimited list
-    'pointtopoint':  __ipv4_quad,
+    'pointopoint':  __ipv4_quad,
     'hwaddress':  __mac,
     'mtu':  __int,
     'scope': __within(['global', 'link', 'host'], dtype=str),
@@ -528,7 +531,7 @@ def _parse_interfaces(interface_files=None):
     method = -1
 
     for interface_file in interface_files:
-        with open(interface_file) as interfaces:
+        with salt.utils.fopen(interface_file) as interfaces:
             for line in interfaces:
                 # Identify the clauses by the first word of each line.
                 # Go to the next line if the current line is a comment
@@ -1086,6 +1089,8 @@ def _parse_bridge_opts(opts, iface):
     config = {}
 
     if 'ports' in opts:
+        if isinstance(opts['ports'], list):
+            opts['ports'] = ','.join(opts['ports'])
         config.update({'ports': opts['ports']})
 
     for opt in ['ageing', 'fd', 'gcint', 'hello', 'maxage']:
@@ -1174,20 +1179,20 @@ def _parse_settings_eth(opts, iface_type, enabled, iface):
 
             iface_data['inet']['ethtool'] = ethtool
             # return a list of sorted keys to ensure consistent order
-            iface_data['inet']['ethtool_keys'] = sorted(ethtool.keys())
+            iface_data['inet']['ethtool_keys'] = sorted(ethtool)
 
     if iface_type == 'bridge':
         bridging = _parse_bridge_opts(opts, iface)
         if bridging:
             iface_data['inet']['bridging'] = bridging
-            iface_data['inet']['bridging_keys'] = sorted(bridging.keys())
+            iface_data['inet']['bridging_keys'] = sorted(bridging)
 
     elif iface_type == 'bond':
         bonding = _parse_settings_bond(opts, iface)
         if bonding:
             iface_data['inet']['bonding'] = bonding
             iface_data['inet']['bonding']['slaves'] = opts['slaves']
-            iface_data['inet']['bonding_keys'] = sorted(bonding.keys())
+            iface_data['inet']['bonding_keys'] = sorted(bonding)
 
     elif iface_type == 'slave':
         adapters[iface]['master'] = opts['master']
@@ -1251,8 +1256,8 @@ def _parse_network_settings(opts, current):
     the global network settings file.
     '''
     # Normalize keys
-    opts = dict((k.lower(), v) for (k, v) in opts.iteritems())
-    current = dict((k.lower(), v) for (k, v) in current.iteritems())
+    opts = dict((k.lower(), v) for (k, v) in six.iteritems(opts))
+    current = dict((k.lower(), v) for (k, v) in six.iteritems(current))
     result = {}
 
     valid = _CONFIG_TRUE + _CONFIG_FALSE
@@ -1294,7 +1299,7 @@ def _parse_routes(iface, opts):
     the route settings file.
     '''
     # Normalize keys
-    opts = dict((k.lower(), v) for (k, v) in opts.iteritems())
+    opts = dict((k.lower(), v) for (k, v) in six.iteritems(opts))
     result = {}
     if 'routes' not in opts:
         _raise_error_routes(iface, 'routes', 'List of routes')
@@ -1445,9 +1450,8 @@ def _write_file_ppp_ifaces(iface, data):
         msg = msg.format(os.path.dirname(filename))
         log.error(msg)
         raise AttributeError(msg)
-    fout = salt.utils.fopen(filename, 'w')
-    fout.write(ifcfg)
-    fout.close()
+    with salt.utils.fopen(filename, 'w') as fout:
+        fout.write(ifcfg)
 
     # Return as a array so the difflib works
     return filename
@@ -1481,12 +1485,14 @@ def build_bond(iface, **settings):
     path = os.path.join(_DEB_NETWORK_CONF_FILES, '{0}.conf'.format(iface))
     if deb_major == '5':
         __salt__['cmd.run'](
-            'sed -i -e "/^alias\\s{0}.*/d" /etc/modprobe.conf'.format(iface)
+            'sed -i -e "/^alias\\s{0}.*/d" /etc/modprobe.conf'.format(iface),
+            python_shell=False
         )
         __salt__['cmd.run'](
-            'sed -i -e "/^options\\s{0}.*/d" /etc/modprobe.conf'.format(iface)
+            'sed -i -e "/^options\\s{0}.*/d" /etc/modprobe.conf'.format(iface),
+            python_shell=False
         )
-        __salt__['cmd.run']('cat {0} >> /etc/modprobe.conf'.format(path))
+        __salt__['file.append']('/etc/modprobe.conf', path)
 
     # Load kernel module
     __salt__['kmod.load']('bonding')
@@ -1523,6 +1529,7 @@ def build_interface(iface, iface_type, enabled, **settings):
 
     elif iface_type == 'vlan':
         settings['vlan'] = 'yes'
+        __salt__['pkg.install']('vlan')
 
     elif iface_type == 'pppoe':
         settings['pppoe'] = 'yes'
@@ -1537,7 +1544,7 @@ def build_interface(iface, iface_type, enabled, **settings):
 
     elif iface_type == 'bridge':
         if 'ports' not in settings:
-            msg = 'ports is a required setting for bridge interfaces'
+            msg = 'ports is a required setting for bridge interfaces on Debian or Ubuntu based systems'
             log.error(msg)
             raise AttributeError(msg)
         __salt__['pkg.install']('bridge-utils')
@@ -1741,16 +1748,33 @@ def apply_network_settings(**settings):
     if 'require_reboot' not in settings:
         settings['require_reboot'] = False
 
+    if 'apply_hostname' not in settings:
+        settings['apply_hostname'] = False
+
+    hostname_res = True
+    if settings['apply_hostname'] in _CONFIG_TRUE:
+        if 'hostname' in settings:
+            hostname_res = __salt__['network.mod_hostname'](settings['hostname'])
+        else:
+            log.warning(
+                'The network state sls is trying to apply hostname '
+                'changes but no hostname is defined.'
+            )
+            hostname_res = False
+
+    res = True
     if settings['require_reboot'] in _CONFIG_TRUE:
         log.warning(
             'The network state sls is requiring a reboot of the system to '
             'properly apply network configuration.'
         )
-        return True
+        res = True
     else:
         stop = __salt__['service.stop']('networking')
         time.sleep(2)
-        return stop and __salt__['service.start']('networking')
+        res = stop and __salt__['service.start']('networking')
+
+    return hostname_res and res
 
 
 def build_network_settings(**settings):
@@ -1808,6 +1832,7 @@ def build_network_settings(**settings):
 
     # Only write the hostname if it has changed
     if not opts['hostname'] == current_network_settings['hostname']:
+        # TODO  replace wiht a call to network.mod_hostname instead
         _write_file_network(hostname, _DEB_HOSTNAME_FILE)
 
     new_domain = False

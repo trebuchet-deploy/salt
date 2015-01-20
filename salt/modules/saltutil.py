@@ -6,42 +6,47 @@ minion.
 
 :depends:   - esky Python module for update functionality
 '''
+from __future__ import absolute_import
 
 # Import python libs
 import os
-import hashlib
 import shutil
 import signal
 import logging
 import fnmatch
-import time
 import sys
 import copy
-from urllib2 import URLError
 
-# Import salt libs
-import salt
-import salt.payload
-import salt.state
-import salt.client
-import salt.utils
-import salt.utils.process
-import salt.utils.minion
-import salt.transport
-from salt.exceptions import (
-    SaltReqTimeoutError, SaltRenderError, CommandExecutionError
-)
-from salt._compat import string_types
-
-__proxyenabled__ = ['*']
-
-# Import third party libs
+# Import 3rd-party libs
+# pylint: disable=import-error
 try:
     import esky
     from esky import EskyVersionError
     HAS_ESKY = True
 except ImportError:
     HAS_ESKY = False
+# pylint: disable=no-name-in-module
+from salt.ext.six import string_types
+from salt.ext.six.moves.urllib.error import URLError
+# pylint: enable=import-error,no-name-in-module
+
+# Import salt libs
+import salt
+import salt.payload
+import salt.state
+import salt.client
+import salt.client.ssh.client
+import salt.runner
+import salt.utils
+import salt.utils.process
+import salt.utils.minion
+import salt.transport
+import salt.wheel
+from salt.exceptions import (
+    SaltReqTimeoutError, SaltRenderError, CommandExecutionError
+)
+
+__proxyenabled__ = ['*']
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +62,7 @@ def _get_top_file_envs():
             st_ = salt.state.HighState(__opts__)
             top = st_.get_top()
             if top:
-                envs = st_.top_matches(top).keys() or 'base'
+                envs = list(st_.top_matches(top).keys()) or 'base'
             else:
                 envs = 'base'
         except SaltRenderError as exc:
@@ -112,14 +117,10 @@ def _sync(form, saltenv=None):
             log.info('Copying {0!r} to {1!r}'.format(fn_, dest))
             if os.path.isfile(dest):
                 # The file is present, if the sum differs replace it
-                hash_type = getattr(hashlib, __opts__.get('hash_type', 'md5'))
-                srch = hash_type(
-                    salt.utils.fopen(fn_, 'r').read()
-                ).hexdigest()
-                dsth = hash_type(
-                    salt.utils.fopen(dest, 'r').read()
-                ).hexdigest()
-                if srch != dsth:
+                hash_type = __opts__.get('hash_type', 'md5')
+                src_digest = salt.utils.get_hash(fn_, hash_type)
+                dst_digest = salt.utils.get_hash(dest, hash_type)
+                if src_digest != dst_digest:
                     # The downloaded file differs, replace!
                     shutil.copyfile(fn_, dest)
                     ret.append('{0}.{1}'.format(form, relname))
@@ -376,6 +377,9 @@ def sync_all(saltenv=None, refresh=True):
     Sync down all of the dynamic modules from the file server for a specific
     environment
 
+    refresh : True
+        Also refresh the execution modules available to the minion.
+
     CLI Example:
 
     .. code-block:: bash
@@ -406,7 +410,14 @@ def refresh_pillar():
 
         salt '*' saltutil.refresh_pillar
     '''
-    return __salt__['event.fire']({}, 'pillar_refresh')
+    try:
+        ret = __salt__['event.fire']({}, 'pillar_refresh')
+    except KeyError:
+        log.error('Event module not available. Module refresh failed.')
+        ret = False  # Effectively a no-op, since we can't really return without an event system
+    return ret
+
+pillar_refresh = refresh_pillar
 
 
 def refresh_modules():
@@ -419,7 +430,12 @@ def refresh_modules():
 
         salt '*' saltutil.refresh_modules
     '''
-    return __salt__['event.fire']({}, 'module_refresh')
+    try:
+        ret = __salt__['event.fire']({}, 'module_refresh')
+    except KeyError:
+        log.error('Event module not available. Module refresh failed.')
+        ret = False  # Effectively a no-op, since we can't really return without an event system
+    return ret
 
 
 def is_running(fun):
@@ -597,16 +613,19 @@ def regen_keys():
             os.remove(path)
         except os.error:
             pass
-    time.sleep(60)
-    sreq = salt.payload.SREQ(__opts__['master_uri'])
-    auth = salt.crypt.SAuth(__opts__)
+    # TODO: move this into a channel function? Or auth?
+    # create a channel again, this will force the key regen
+    channel = salt.transport.Channel.factory(__opts__)
 
 
-def revoke_auth():
+def revoke_auth(preserve_minion_cache=False):
     '''
     The minion sends a request to the master to revoke its own key.
     Note that the minion session will be revoked and the minion may
     not be able to return the result of this command back to the master.
+
+    If the 'preserve_minion_cache' flag is set to True, the master
+    cache for this minion will not be removed.
 
     CLI Example:
 
@@ -614,26 +633,22 @@ def revoke_auth():
 
         salt '*' saltutil.revoke_auth
     '''
-    # sreq = salt.payload.SREQ(__opts__['master_uri'])
-    auth = salt.crypt.SAuth(__opts__)
-    tok = auth.gen_token('salt')
+    channel = salt.transport.Channel.factory(__opts__)
+    tok = channel.auth.gen_token('salt')
     load = {'cmd': 'revoke_auth',
             'id': __opts__['id'],
-            'tok': tok}
+            'tok': tok,
+            'preserve_minion_cache': preserve_minion_cache}
 
-    sreq = salt.transport.Channel.factory(__opts__)
     try:
-        sreq.send(load)
-        # return auth.crypticle.loads(
-        #         sreq.send('aes', auth.crypticle.dumps(load), 1))
+        return channel.send(load)
     except SaltReqTimeoutError:
         return False
-    return False
 
 
 def _get_ssh_or_api_client(cfgfile, ssh=False):
     if ssh:
-        client = salt.client.SSHClient(cfgfile)
+        client = salt.client.ssh.client.SSHClient(cfgfile)
     else:
         client = salt.client.get_local_client(cfgfile)
     return client
@@ -707,10 +722,10 @@ def cmd_iter(tgt,
 
     .. code-block:: bash
 
-        salt '*' saltutil.cmd
+        salt '*' saltutil.cmd_iter
     '''
     if ssh:
-        client = salt.client.SSHClient(__opts__['conf_file'])
+        client = salt.client.ssh.client.SSHClient(__opts__['conf_file'])
     else:
         client = salt.client.get_local_client(__opts__['conf_file'])
     for ret in client.cmd_iter(
@@ -723,6 +738,48 @@ def cmd_iter(tgt,
             kwarg,
             **kwargs):
         yield ret
+
+
+def runner(fun, **kwargs):
+    '''
+    Execute a runner module (this function must be run on the master)
+
+    .. versionadded:: 2014.7
+
+    name
+        The name of the function to run
+    kwargs
+        Any keyword arguments to pass to the runner function
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt '*' saltutil.runner jobs.list_jobs
+    '''
+    rclient = salt.runner.RunnerClient(__opts__)
+    return rclient.cmd(fun, [], kwarg=kwargs)
+
+
+def wheel(fun, **kwargs):
+    '''
+    Execute a wheel module (this function must be run on the master)
+
+    .. versionadded:: 2014.7
+
+    name
+        The name of the function to run
+    kwargs
+        Any keyword arguments to pass to the wheel function
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt '*' saltutil.wheel key.accept match=jerry
+    '''
+    wclient = salt.wheel.WheelClient(__opts__)
+    return wclient.cmd(fun, **kwargs)
 
 
 # this is the only way I could figure out how to get the REAL file_roots

@@ -3,6 +3,8 @@
 '''
 Discover all instances of unittest.TestCase in this directory.
 '''
+# pylint: disable=file-perms
+
 # Import python libs
 from __future__ import print_function
 import os
@@ -100,14 +102,6 @@ class SaltTestsuiteParser(SaltCoverageTestingParser):
             help='Run shell tests'
         )
         self.test_selection_group.add_option(
-            '-R',
-            '--runner',
-            dest='runner',
-            default=False,
-            action='store_true',
-            help='Run salt/runner.py tests'
-        )
-        self.test_selection_group.add_option(
             '-r',
             '--runners',
             dest='runners',
@@ -192,8 +186,8 @@ class SaltTestsuiteParser(SaltCoverageTestingParser):
         if self.options.coverage and any((
                 self.options.module, self.options.cli, self.options.client,
                 self.options.shell, self.options.unit, self.options.state,
-                self.options.runner, self.options.runners, self.options.loader,
-                self.options.name, self.options.outputter, self.options.fileserver,
+                self.options.runners, self.options.loader, self.options.name,
+                self.options.outputter, self.options.fileserver,
                 self.options.wheel, os.geteuid() != 0,
                 not self.options.run_destructive)):
             self.error(
@@ -206,16 +200,14 @@ class SaltTestsuiteParser(SaltCoverageTestingParser):
         # Set test suite defaults if no specific suite options are provided
         if not any((self.options.module, self.options.client, self.options.cli,
                     self.options.shell, self.options.unit, self.options.state,
-                    self.options.runner, self.options.runners, self.options.loader,
-                    self.options.name, self.options.outputter,
-                    self.options.cloud_provider_tests, self.options.fileserver,
-                    self.options.wheel, self.options.api)):
+                    self.options.runners, self.options.loader, self.options.name,
+                    self.options.outputter, self.options.cloud_provider_tests,
+                    self.options.fileserver, self.options.wheel, self.options.api)):
             self.options.module = True
             self.options.cli = True
             self.options.client = True
             self.options.shell = True
             self.options.unit = True
-            self.options.runner = True
             self.options.runners = True
             self.options.state = True
             self.options.loader = True
@@ -259,8 +251,7 @@ class SaltTestsuiteParser(SaltCoverageTestingParser):
                 named_tests.append(test)
 
         if (self.options.unit or named_unit_test) and not \
-                (self.options.runner or
-                 self.options.runners or
+                (self.options.runners or
                  self.options.state or
                  self.options.module or
                  self.options.cli or
@@ -271,7 +262,7 @@ class SaltTestsuiteParser(SaltCoverageTestingParser):
                  self.options.wheel or
                  self.options.cloud_provider_tests or
                  named_tests):
-            # We're either not running any of runner, state, module and client
+            # We're either not running any of runners, state, module and client
             # tests, or, we're only running unittests by passing --unit or by
             # passing only `unit.<whatever>` to --name.
             # We don't need the tests daemon running
@@ -316,12 +307,10 @@ class SaltTestsuiteParser(SaltCoverageTestingParser):
 
         status = []
         if not any([self.options.cli, self.options.client, self.options.module,
-                    self.options.runner, self.options.runners, self.options.shell,
-                    self.options.state, self.options.loader,
-                    self.options.outputter, self.options.name,
-                    self.options.cloud_provider_tests,
-                    self.options.api, self.options.fileserver,
-                    self.options.wheel]):
+                    self.options.runners, self.options.shell, self.options.state,
+                    self.options.loader, self.options.outputter, self.options.name,
+                    self.options.cloud_provider_tests, self.options.api,
+                    self.options.fileserver, self.options.wheel]):
             return status
 
         with TestDaemon(self):
@@ -333,8 +322,6 @@ class SaltTestsuiteParser(SaltCoverageTestingParser):
                     status.append(results)
             if self.options.loader:
                 status.append(self.run_integration_suite('loader', 'Loader'))
-            if self.options.runner:
-                status.append(self.run_integration_suite('runner', 'Runner'))
             if self.options.runners:
                 status.append(self.run_integration_suite('runners', 'Runners'))
             if self.options.module:
@@ -382,7 +369,7 @@ class SaltTestsuiteParser(SaltCoverageTestingParser):
             )
             status.append(results)
             # We executed ALL unittests, we can skip running unittests by name
-            # bellow
+            # below
             return status
 
         for name in named_unit_test:

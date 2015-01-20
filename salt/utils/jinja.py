@@ -2,6 +2,7 @@
 '''
 Jinja loading utils to enable a more powerful backend for jinja templates
 '''
+from __future__ import absolute_import
 
 # Import python libs
 from os import path
@@ -22,7 +23,7 @@ import yaml
 import salt
 import salt.fileclient
 from salt.utils.odict import OrderedDict
-from salt._compat import string_types
+from salt.ext.six import string_types
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class SaltCacheLoader(BaseLoader):
     Templates are cached like regular salt states
     and only loaded once per loader instance.
     '''
-    def __init__(self, opts, saltenv='base', encoding='utf-8', env=None):
+    def __init__(self, opts, saltenv='base', encoding='utf-8', env=None, pillar_rend=False):
         if env is not None:
             salt.utils.warn_until(
                 'Boron',
@@ -64,20 +65,23 @@ class SaltCacheLoader(BaseLoader):
         self.opts = opts
         self.saltenv = saltenv
         self.encoding = encoding
-        if opts.get('file_client', 'remote') == 'local':
+        if self.opts.get('__pillar', False):
             self.searchpath = opts['file_roots'][saltenv]
         else:
             self.searchpath = [path.join(opts['cachedir'], 'files', saltenv)]
         log.debug('Jinja search path: {0!r}'.format(self.searchpath))
         self._file_client = None
         self.cached = []
+        self.pillar_rend = pillar_rend
 
     def file_client(self):
         '''
         Return a file client. Instantiates on first call.
         '''
         if not self._file_client:
-            self._file_client = salt.fileclient.get_file_client(self.opts)
+            self._file_client = salt.fileclient.get_file_client(
+                    self.opts,
+                    self.pillar_rend)
         return self._file_client
 
     def cache_file(self, template):
@@ -255,7 +259,7 @@ class SerializerExtension(Extension, object):
     .. code-block:: jinja
 
         {%- set yaml_src = "{foo: it works}"|load_yaml %}
-        {%- set json_src = "{'bar': 'for real'}"|load_yaml %}
+        {%- set json_src = "{'bar': 'for real'}"|load_json %}
         Dude, {{ yaml_src.foo }} {{ json_src.bar }}!
 
     will be rendered has::
@@ -361,8 +365,8 @@ class SerializerExtension(Extension, object):
             return data
         return explore(data)
 
-    def format_json(self, value):
-        return Markup(json.dumps(value, sort_keys=True).strip())
+    def format_json(self, value, sort_keys=True):
+        return Markup(json.dumps(value, sort_keys=sort_keys).strip())
 
     def format_yaml(self, value, flow_style=True):
         return Markup(yaml.dump(value, default_flow_style=flow_style,

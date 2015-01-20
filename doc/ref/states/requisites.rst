@@ -20,7 +20,7 @@ the targeting state.  The following example demonstrates a direct requisite:
 .. code-block:: yaml
 
     vim:
-      pkg.installed
+      pkg.installed: []
 
     /etc/vimrc:
       file.managed:
@@ -202,18 +202,18 @@ a state that has not yet been executed. The state containing the ``prereq``
 requisite is defined as the pre-requiring state. The state specified in the
 ``prereq`` statement is defined as the pre-required state.
 
-When ``prereq`` is called, the pre-required state reports if it expects to
-have any changes. It does this by running the pre-required single state as a
-test-run by enabling ``test=True``. This test-run will return a dictionary
-containing a key named "changes". (See the ``watch`` section above for
-examples of "changes" dictionaries.)
+When a ``prereq`` requisite is evaluated, the pre-required state reports if it
+expects to have any changes. It does this by running the pre-required single
+state as a test-run by enabling ``test=True``. This test-run will return a
+dictionary containing a key named "changes". (See the ``watch`` section above
+for examples of "changes" dictionaries.)
 
 If the "changes" key contains a populated dictionary, it means that the
 pre-required state expects changes to occur when the state is actually
-executed, as opposed to the test-run. The pre-required state will now
-actually run. If the pre-required state executes successfully, the
-pre-requiring state will then execute. If the pre-required state fails, the
-pre-requiring state will not execute.
+executed, as opposed to the test-run. The pre-requiring state will now
+actually run. If the pre-requiring state executes successfully, the
+pre-required state will then execute. If the pre-requiring state fails, the
+pre-required state will not execute.
 
 If the "changes" key contains an empty dictionary, this means that changes are
 not expected by the pre-required state. Neither the pre-required state nor the
@@ -258,15 +258,13 @@ The ``onfail`` requisite is applied in the same way as ``require`` as ``watch``:
 .. code-block:: yaml
 
     primary_mount:
-      mount:
-        - mounted
+      mount.mounted:
         - name: /mnt/share
         - device: 10.0.0.45:/share
         - fstype: nfs
 
     backup_mount:
-      mount:
-        - mounted
+      mount.mounted:
         - name: /mnt/share
         - device: 192.168.40.34:/share
         - fstype: nfs
@@ -338,10 +336,8 @@ Using ``require``
 .. code-block:: yaml
 
     httpd:
-      pkg:
-        - installed
-      service:
-        - running
+      pkg.installed: []
+      service.running:
         - require:
           - pkg: httpd
 
@@ -350,12 +346,10 @@ Using ``require_in``
 .. code-block:: yaml
 
     httpd:
-      pkg:
-        - installed
+      pkg.installed:
         - require_in:
           - service: httpd
-      service:
-        - running
+      service.running: []
 
 The ``require_in`` statement is particularly useful when assigning a require
 in a separate sls file. For instance it may be common for httpd to require
@@ -367,10 +361,8 @@ http.sls
 .. code-block:: yaml
 
     httpd:
-      pkg:
-        - installed
-      service:
-        - running
+      pkg.installed: []
+      service.running:
         - require:
           - pkg: httpd
 
@@ -382,8 +374,7 @@ php.sls
       - http
 
     php:
-      pkg:
-        - installed
+      pkg.installed:
         - require_in:
           - service: httpd
 
@@ -395,8 +386,7 @@ mod_python.sls
       - http
 
     mod_python:
-      pkg:
-        - installed
+      pkg.installed:
         - require_in:
           - service: httpd
 
@@ -439,6 +429,21 @@ exist (returns ``False``). The state will run if both commands return
 
 However, the state will not run if both commands return ``True``.
 
+Unless requisites are resolved for each name to which they are associated.
+
+For example:
+
+.. code-block:: yaml
+
+    deploy_app:
+      cmd.run:
+        - first_deploy_cmd
+        - second_deploy_cmd
+      - unless: some_check
+
+In the above case, ``some_check`` will be run prior to _each_ name -- once for
+``first_deploy_cmd`` and a second time for ``second_deploy_cmd``.
+
 Onlyif
 ------
 
@@ -455,7 +460,7 @@ return ``False``, the state will not run.
         - name: glusterfs.stop_volume
         - m_name: work
         - onlyif:
-            - gluster volume status work
+          - gluster volume status work
         - order: 1
 
     remove-volume:
@@ -463,12 +468,56 @@ return ``False``, the state will not run.
         - name: glusterfs.delete
         - m_name: work
         - onlyif:
-            - gluster volume info work
+          - gluster volume info work
         - watch:
           - cmd: stop-volume
 
 The above example ensures that the stop_volume and delete modules only run
 if the gluster commands return a 0 ret value.
+
+Listen/Listen_in
+----------------
+
+.. versionadded:: 2014.7.0
+
+listen and its counterpart listen_in trigger mod_wait functions for states,
+when those states succeed and result in changes, similar to how watch its
+counterpart watch_in. Unlike watch and watch_in, listen, and listen_in will
+not modify the order of states and can be used to ensure your states are
+executed in the order they are defined. All listen/listen_in actions will occur
+at the end of a state run, after all states have completed.
+
+.. code-block:: yaml
+
+ restart-apache2:
+   service.running:
+     - name: apache2
+     - listen:
+       - file: /etc/apache2/apache2.conf
+
+ configure-apache2:
+   file.managed:
+     - path: /etc/apache2/apache2.conf
+     - source: salt://apache2/apache2.conf
+
+This example will cause apache2 to be restarted when the apache2.conf file is
+changed, but the apache2 restart will happen at the end of the state run.
+
+.. code-block:: yaml
+
+ restart-apache2:
+   service.running:
+     - name: apache2
+
+ configure-apache2:
+   file.managed:
+     - path: /etc/apache2/apache2.conf
+     - source: salt://apache2/apache2.conf
+     - listen_in:
+       - service: apache2
+
+This example does the same as the above example, but puts the state argument
+on the file resource, rather than the service resource.
 
 check_cmd
 ---------
@@ -486,7 +535,7 @@ expected.
         - pattern: ^enabled=0
         - repl: enabled=1
         - check_cmd:
-            - grep 'enabled=0' /etc/yum.repos.d/fedora.repo && return 1 || return 0
+          - grep 'enabled=0' /etc/yum.repos.d/fedora.repo && return 1 || return 0
 
 This will attempt to do a replace on all enabled=0 in the .repo file, and
 replace them with enabled=1.  The check_cmd is just a bash command.  It will do
@@ -501,9 +550,9 @@ Overriding Checks
 
 There are two commands used for the above checks.
 
-`mod_run_check` is used to check for onlyif and unless.  If the goal is to
-override the global check for these to variables, include a mod_run_check in the
+``mod_run_check`` is used to check for ``onlyif`` and ``unless``.  If the goal is to
+override the global check for these to variables, include a ``mod_run_check`` in the
 salt/states/ file.
 
-`mod_run_check_cmd` is used to check for the check_cmd options.  To override
-this one, include a mod_run_check_cmd in the states file for the state.
+``mod_run_check_cmd`` is used to check for the check_cmd options.  To override
+this one, include a ``mod_run_check_cmd`` in the states file for the state.

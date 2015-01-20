@@ -55,7 +55,7 @@ the interface option must be adjusted too (for example: "interface: '::'")
 
 Default: ``4505``
 
-The network port to set up the publication interface
+The network port to set up the publication interface.
 
 .. code-block:: yaml
 
@@ -69,8 +69,11 @@ The network port to set up the publication interface
 Default: ``None``
 
 The id to be passed in the publish job to minions. This is used for MultiSyndics
-to return the job to the requesting master. Note, this must be the same string
-as the syndic is configured with.
+to return the job to the requesting master.
+
+.. note::
+
+    This must be the same string as the syndic is configured with.
 
 .. code-block:: yaml
 
@@ -112,7 +115,7 @@ seeing on the console(and then salt-master crashes):
 By default this value will be the one of `ulimit -Hn`, i.e., the hard limit for
 max open files.
 
-To set a different value than the default one, uncomment and configure this
+To set a different value than the default one, uncomment, and configure this
 setting. Remember that this value CANNOT be higher than the hard limit. Raising
 the hard limit depends on the OS and/or distribution, a good way to find the
 limit is to search the internet for something like this:
@@ -134,6 +137,14 @@ worker_threads value.
 
 Worker threads should not be put below 3 when using the peer system, but can
 drop down to 1 worker otherwise.
+
+.. note::
+    When the master daemon starts, it is expected behaviour to see
+    multiple salt-master processes, even if 'worker_threads' is set to '1'. At
+    a minimum, a controlling process will start along with a Publisher, an
+    EventPublisher, and a number of MWorker processes will be started. The
+    number of MWorker processes is tuneable by the 'worker_threads'
+    configuration value while the others are not.
 
 .. code-block:: yaml
 
@@ -160,7 +171,7 @@ execution returns and command executions.
 
 Default: ``/var/run/salt-master.pid``
 
-Specify the location of the master pidfile
+Specify the location of the master pidfile.
 
 .. code-block:: yaml
 
@@ -247,7 +258,7 @@ Verify and set permissions on configuration directories at startup.
 
 Default: ``24``
 
-Set the number of hours to keep old job information
+Set the number of hours to keep old job information.
 
 .. conf_master:: timeout
 
@@ -286,7 +297,7 @@ Set the default outputter used by the salt command.
 Default: ``True``
 
 By default output is colored, to disable colored output set the color value
-to False
+to False.
 
 .. code-block:: yaml
 
@@ -300,7 +311,7 @@ to False
 Default: :file:`/var/run/salt/master`
 
 Set the location to use for creating Unix sockets for master process
-communication
+communication.
 
 .. code-block:: yaml
 
@@ -329,7 +340,7 @@ a burden on the master for larger deployments (over 5000 minions).
 Disabling the job cache will make previously executed jobs unavailable to
 the jobs system and is not generally recommended. Normally it is wise to make
 sure the master has access to a faster IO system or a tmpfs is mounted to the
-jobs dir
+jobs dir.
 
 .. conf_master:: minion_data_cache
 
@@ -340,8 +351,8 @@ Default: ``True``
 
 The minion data cache is a cache of information about the minions stored on the
 master, this information is primarily the pillar and grains data. The data is
-cached in the Master cachedir under the name of the minion and used to pre
-determine what minions are expected to reply from executions.
+cached in the Master cachedir under the name of the minion and used to
+predetermine what minions are expected to reply from executions.
 
 .. code-block:: yaml
 
@@ -357,7 +368,7 @@ Default: ``''``
 Used to specify a default returner for all minions, when this option is set
 the specified returner needs to be properly configured and the minions will
 always default to sending returns to this returner. This will also disable the
-local job cache on the master
+local job cache on the master.
 
 .. code-block:: yaml
 
@@ -372,9 +383,9 @@ local job cache on the master
 
 Default: 'local_cache'
 
-Specify the returner to use for ther job cache. The job cache will only be
+Specify the returner to use for the job cache. The job cache will only be
 interacted with from the salt master and therefore does not need to be
-accesible from the minions.
+accessible from the minions.
 
 .. code-block:: yaml
 
@@ -411,6 +422,21 @@ this can slow down the authentication process a bit in large setups.
 
     max_minions: 100
 
+``con_cache``
+-------------
+
+Default: False
+
+If max_minions is used in large installations, the master might experience
+high-load situations because of having to check the number of connected
+minions for every authentication. This cache provides the minion-ids of
+all connected minions to all MWorker-processes and greatly improves the
+performance of max_minions.
+
+.. code-block:: yaml
+
+    con_cache: True
+
 .. conf_master:: presence_events
 
 ``presence_events``
@@ -418,7 +444,7 @@ this can slow down the authentication process a bit in large setups.
 
 Default: False
 
-When enabled the master regularly sends events of currently connected, lost
+When enabled the master regularly sends events of currently connected, lost,
 and newly connected minions on the eventbus.
 
 .. code-block:: yaml
@@ -432,7 +458,7 @@ and newly connected minions on the eventbus.
 
 Default: '/etc/salt/roster'
 
-Pass in an alternative location for the salt-ssh roster file
+Pass in an alternative location for the salt-ssh roster file.
 
 .. code-block:: yaml
 
@@ -526,7 +552,7 @@ membership in the :conf_master:`autosign_file` and the
 Default: ``{}``
 
 Enable user accounts on the master to execute specific modules. These modules
-can be expressed as regular expressions
+can be expressed as regular expressions.
 
 .. code-block:: yaml
 
@@ -583,7 +609,9 @@ validate users to access areas of the Salt system.
 
 Default: ``43200``
 
-Time (in seconds) for a newly generated token to live. Default: 12 hours
+Time (in seconds) for a newly generated token to live.
+
+Default: 12 hours
 
 .. code-block:: yaml
 
@@ -610,7 +638,7 @@ security purposes.
 
 Default: ``False``
 
-Sign the master auth-replies with a cryptographical signature of the masters
+Sign the master auth-replies with a cryptographic signature of the masters
 public key. Please see the tutorial how to use these settings in the
 `Multimaster-PKI with Failover Tutorial <http://docs.saltstack.com/en/latest/topics/tutorials/multimaster_pki.html>`_
 
@@ -687,7 +715,7 @@ Master Module Management
 
 Default: ``[]``
 
-Set additional directories to search for runner modules
+Set additional directories to search for runner modules.
 
 .. conf_master:: cython_enable
 
@@ -697,7 +725,7 @@ Set additional directories to search for runner modules
 Default: ``False``
 
 Set to true to enable Cython modules (.pyx files) to be compiled on the fly on
-the Salt master
+the Salt master.
 
 .. code-block:: yaml
 
@@ -716,7 +744,7 @@ Default: ``top.sls``
 
 The state system uses a "top" file to tell the minions what environment to
 use and what modules to use. The state_top file is defined relative to the
-root of the base environment
+root of the base environment.
 
 .. code-block:: yaml
 
@@ -764,7 +792,7 @@ are enabled and available!
 
 Default: ``yaml_jinja``
 
-The renderer to use on the minions to render the state data
+The renderer to use on the minions to render the state data.
 
 .. code-block:: yaml
 
@@ -778,7 +806,7 @@ The renderer to use on the minions to render the state data
 Default: ``False``
 
 Set the global failhard flag, this informs all states to stop running states
-at the moment a single state fails
+at the moment a single state fails.
 
 .. code-block:: yaml
 
@@ -824,7 +852,7 @@ If set to 'changes', the output will be full unless the state didn't change.
 
 Default: ``False``
 
-Enable extra routines for yaml renderer used states containing UTF characters
+Enable extra routines for YAML renderer used states containing UTF characters.
 
 .. code-block:: yaml
 
@@ -838,7 +866,7 @@ Enable extra routines for yaml renderer used states containing UTF characters
 Default: ``False``
 
 Set all state calls to only test if they are going to actually make changes
-or just post what changes are going to be made
+or just post what changes are going to be made.
 
 .. code-block:: yaml
 
@@ -877,8 +905,8 @@ Example:
 Default: ``md5``
 
 The hash_type is the hash to use when discovering the hash of a file on
-the master server. The default is md5, but sha1, sha224, sha256, sha384
-and sha512 are also supported.
+the master server. The default is md5, but sha1, sha224, sha256, sha384, and
+sha512 are also supported.
 
 .. code-block:: yaml
 
@@ -891,7 +919,7 @@ and sha512 are also supported.
 
 Default: ``1048576``
 
-The buffer size in the file server in bytes
+The buffer size in the file server in bytes.
 
 .. code-block:: yaml
 
@@ -959,6 +987,7 @@ The file server works on environments passed to the master. Each environment
 can have multiple root directories. The subdirectories in the multiple file
 roots cannot match, otherwise the downloaded files will not be able to be
 reliably ensured. A base environment is required to house the top file.
+
 Example:
 
 .. code-block:: yaml
@@ -1003,7 +1032,7 @@ translated into salt environments.
     fileserver environments.
 
 As of 2014.7.0, it is possible to have per-repo versions of several of the
-gitfs configuration parameters. For more information, see the :ref:`Gitfs
+gitfs configuration parameters. For more information, see the :ref:`GitFS
 Walkthrough <gitfs-per-remote-config>`.
 
 .. conf_master:: gitfs_provider
@@ -1014,7 +1043,7 @@ Walkthrough <gitfs-per-remote-config>`.
 .. versionadded:: 2014.7.0
 
 Specify the provider to be used for gitfs. More information can be found in the
-:ref:`Gitfs Walkthrough <gitfs-dependencies>`.
+:ref:`GitFS Walkthrough <gitfs-dependencies>`.
 
 .. _pygit2: https://github.com/libgit2/pygit2
 .. _GitPython: https://github.com/gitpython-developers/GitPython
@@ -1113,7 +1142,7 @@ Default: ``[]``
 
 Used to restrict which environments are made available. Can speed up state runs
 if the repos in :conf_master:`gitfs_remotes` contain many branches/tags.  More
-information can be found in the :ref:`Gitfs Walkthrough
+information can be found in the :ref:`GitFS Walkthrough
 <gitfs-whitelist-blacklist>`.
 
 .. code-block:: yaml
@@ -1134,7 +1163,7 @@ Default: ``[]``
 
 Used to restrict which environments are made available. Can speed up state runs
 if the repos in :conf_master:`gitfs_remotes` contain many branches/tags. More
-information can be found in the :ref:`Gitfs Walkthrough
+information can be found in the :ref:`GitFS Walkthrough
 <gitfs-whitelist-blacklist>`.
 
 .. code-block:: yaml
@@ -1145,11 +1174,11 @@ information can be found in the :ref:`Gitfs Walkthrough
       - 'mybranch\d+'
 
 
-Gitfs Authentication Options
+GitFS Authentication Options
 ****************************
 
 These parameters only currently apply to the pygit2 gitfs provider. Examples of
-how to use these can be found in the :ref:`Gitfs Walkthrough
+how to use these can be found in the :ref:`GitFS Walkthrough
 <gitfs-authentication>`.
 
 .. conf_master:: gitfs_user
@@ -1584,9 +1613,9 @@ also be configured on a per-remote basis, see :conf_master:`here
 
 Default: ``tags``
 
-Path relative to the root of the repository where the tags is located. Can also
-be configured on a per-remote basis, see :conf_master:`here <svnfs_remotes>`
-for more info.
+Path relative to the root of the repository where the tags are located. Can
+also be configured on a per-remote basis, see :conf_master:`here
+<svnfs_remotes>` for more info.
 
 .. code-block:: yaml
 
@@ -1794,15 +1823,32 @@ Default: ``None``
 
 There are additional details at :ref:`salt-pillars`
 
+.. conf_master:: ext_pillar_first
+
+``ext_pillar_first``
+--------------------
+
+The ext_pillar_first option allows for external pillar sources to populate
+before file system pillar. This allows for targeting file system pillar from
+ext_pillar.
+
+Default: ``False``
+
+.. code-block:: yaml
+
+    ext_pillar_first: False
+
 .. conf_master:: pillar_source_merging_strategy
 
 ``pillar_source_merging_strategy``
 ----------------------------------
 
+.. versionadded:: 2014.7.0
+
 Default: ``smart``
 
-The pillar_source_merging_strategy option allows to configure merging strategy
-between different sources. It accepts 3 values:
+The pillar_source_merging_strategy option allows you to configure merging
+strategy between different sources. It accepts 3 values:
 
 * recurse:
 
@@ -1866,9 +1912,39 @@ between different sources. It accepts 3 values:
         - quux
         - quux2
 
+* overwrite:
+
+    Will use the behaviour of the 2014.1 branch and earlier.
+
+    Overwrites elements according the order in which they are processed.
+
+    First pillar processed:
+
+    .. code-block:: yaml
+
+        A:
+          first_key: blah
+          second_key: blah
+
+    Second pillar processed:
+
+    .. code-block:: yaml
+
+        A:
+          third_key: blah
+          fourth_key: blah
+
+    will be merged as:
+
+    .. code-block:: yaml
+
+        A:
+          third_key: blah
+          fourth_key: blah
+
 * smart (default):
 
-    it guesses the best strategy, based on the "renderer" setting.
+    Guesses the best strategy based on the "renderer" setting.
 
 
 Syndic Server Settings
@@ -1876,11 +1952,13 @@ Syndic Server Settings
 
 A Salt syndic is a Salt master used to pass commands from a higher Salt master to
 minions below the syndic. Using the syndic is simple. If this is a master that
-will have syndic servers(s) below it, set the "order_masters" setting to True. If this
-is a master that will be running a syndic daemon for passthrough the
-"syndic_master" setting needs to be set to the location of the master server
+will have syndic servers(s) below it, set the "order_masters" setting to True.
 
-Do not not forget that in other word it means that it shares with the local minion it's ID and PKI_DIR.
+If this is a master that will be running a syndic daemon for passthrough the
+"syndic_master" setting needs to be set to the location of the master server.
+
+Do not not forget that, in other words, it means that it shares with the local minion
+its ID and PKI_DIR.
 
 .. conf_master:: order_masters
 
@@ -1905,7 +1983,7 @@ value must be set to True
 Default: ``None``
 
 If this master will be running a salt-syndic to connect to a higher level
-master, specify the higher level master with this configuration value
+master, specify the higher level master with this configuration value.
 
 .. code-block:: yaml
 
@@ -1919,7 +1997,7 @@ master, specify the higher level master with this configuration value
 Default: ``4506``
 
 If this master will be running a salt-syndic to connect to a higher level
-master, specify the higher level master port with this configuration value
+master, specify the higher level master port with this configuration value.
 
 .. code-block:: yaml
 
@@ -1972,7 +2050,7 @@ Default: ``{}``
 The configuration uses regular expressions to match minions and then a list
 of regular expressions to match functions. The following will allow the
 minion authenticated as foo.example.com to execute functions from the test
-and pkg modules
+and pkg modules.
 
 .. code-block:: yaml
 
@@ -2280,7 +2358,7 @@ Default: ``/srv/salt/win/repo/winrepo.p``
 
 Default: ``''``
 
-List of git repositories to include with the local repo
+List of git repositories to include with the local repo.
 
 .. code-block:: yaml
 

@@ -138,14 +138,11 @@
 
 # Number of consecutive SaltReqTimeoutError that are acceptable when trying to
 # authenticate.
-#auth_tries: 1
+#auth_tries: 7
 
-# If authentication fails due to SaltReqTimeoutError, continue without stopping the
-# minion.
-#auth_safemode: True
-
-# If the minion hits an error that is recoverable, restart the minion.
-#restart_on_error: False
+# If authentication fails due to SaltReqTimeoutError during a ping_interval,
+# cause sub minion process to restart.
+#auth_safemode: False
 
 # Ping Master to ensure connection is alive (minutes).
 #ping_interval: 0
@@ -247,11 +244,6 @@
 # is not enabled.
 # grains_cache_expiration: 300
 
-# When healing, a dns_check is run. This is to make sure that the originally
-# resolved dns has not changed. If this is something that does not happen in
-# your environment, set this value to False.
-#dns_check: True
-
 # Windows platforms lack posix IPC and must rely on slower TCP based inter-
 # process communications. Set ipc_mode to 'tcp' on such systems
 #ipc_mode: ipc
@@ -264,6 +256,12 @@
 # memory. This value tunes the maximum size of a message allowed onto the
 # minion event bus. The value is expressed in bytes.
 #max_event_size: 1048576
+
+# To detect failed master(s) and fire events on connect/disconnect, set
+# master_alive_interval to the number of seconds to poll the masters for
+# connection events.
+#
+#master_alive_interval: 30
 
 # The minion can include configuration from other files. To enable this,
 # pass a list of paths to this option. The paths can be either relative or
@@ -368,6 +366,14 @@
 # Top file to execute if startup_states is 'top':
 #top_file: ''
 
+# Automatically aggregate all states that have support for mod_aggregate by
+# setting to True. Or pass a list of state module names to automatically
+# aggregate just those types.
+#
+# state_aggregate:
+#   - pkg
+#
+#state_aggregate: False
 
 #####     File Directory Settings    #####
 ##########################################
@@ -450,9 +456,13 @@
 #state_output: full
 
 # The state_output_diff setting changes whether or not the output from
-# sucessful states is returned. Useful when even the terse output of these
+# successful states is returned. Useful when even the terse output of these
 # states is cluttering the logs. Set it to True to ignore them.
 #state_output_diff: False
+
+# The state_output_profile setting changes whether profile information
+# will be shown for each state run.
+#state_output_profile: True
 
 # Fingerprint of the master public key to double verify the master is valid,
 # the master fingerprint can be found by running "salt-key -F master" on the
@@ -488,6 +498,7 @@
 
 # The level of messages to send to the log file.
 # One of 'garbage', 'trace', 'debug', info', 'warning', 'error', 'critical'.
+# If using 'log_granular_levels' this must be set to the highest desired level.
 # Default: 'warning'
 #log_level_logfile:
 
@@ -498,6 +509,9 @@
 
 # The format of the console logging messages. Allowed formatting options can
 # be seen here: http://docs.python.org/library/logging.html#logrecord-attributes
+#
+# Console log colors are specified by these special log formatters:
+# %(colorlevel), %(colorname), %(colorprocess), %(colormsg).
 #log_fmt_console: '[%(levelname)-8s] %(message)s'
 #log_fmt_logfile: '%(asctime)s,%(msecs)03.0f [%(name)-17s][%(levelname)-8s] %(message)s'
 
@@ -505,7 +519,7 @@
 # example sets the main salt library at the 'warning' level, but sets
 # 'salt.modules' to log at the 'debug' level:
 #   log_granular_levels:
-#     'salt': 'warning',
+#     'salt': 'warning'
 #     'salt.modules': 'debug'
 #
 #log_granular_levels: {}
@@ -577,3 +591,9 @@
 ############################################
 # Location of the repository cache file on the master:
 #win_repo_cachefile: 'salt://win/repo/winrepo.p'
+
+
+######      Returner  settings        ######
+############################################
+# Which returner(s) will be used for minion's result:
+#return: mysql

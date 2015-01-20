@@ -195,17 +195,7 @@ def version(*names, **kwargs):
         return ''
     if len(names) > 1:
         reverse_dict = {}
-        for name in names:
-            ret[name] = ''
-            versions = _get_package_info(name)
-            if versions:
-                for val in versions.itervalues():
-                    if 'full_name' in val and len(val.get('full_name', '')) > 0:
-                        reverse_dict[val.get('full_name', '')] = name
-                        win_names.append(val.get('full_name', ''))
-            else:
-                win_names.append(name)
-        nums = __salt__['pkg_resource.version'](*win_names, **kwargs)
+        nums = __salt__['pkg_resource.version'](*names, **kwargs)
         if len(nums):
             for num, val in nums.iteritems():
                 if len(val) > 0:
@@ -314,7 +304,7 @@ $msi.GetType().InvokeMember('ProductsEx', 'GetProperty', $null, $msi, ('', 's-1-
 | Write-host
 '''.replace('\n', ' ')  # make this a one-liner
 
-    ret = __salt__['cmd.run_all'](ps, shell='powershell')
+    ret = __salt__['cmd.run_all'](ps, shell='powershell', python_shell=True)
     # sometimes the powershell reflection fails on a single product,
     # giving us a non-zero return code AND useful output. Ignore RC
     # and just try to process stdout, which should empty if the cmd
@@ -508,7 +498,7 @@ def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
     if salt.utils.is_true(refresh):
         refresh_db()
 
-    # Ignore pkg_type from parse_targets, Windows does not suport the "sources"
+    # Ignore pkg_type from parse_targets, Windows does not support the "sources"
     # argument
     pkg_params = __salt__['pkg_resource.parse_targets'](name,
                                                         pkgs,
@@ -565,12 +555,14 @@ def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
         cached_pkg = cached_pkg.replace('/', '\\')
         msiexec = pkginfo[version_num].get('msiexec')
         install_flags = '{0} {1}'.format(pkginfo[version_num]['install_flags'], options and options.get('extra_install_flags') or "")
-        cmd = '{msiexec}"{cached_pkg}" {install_flags}'.format(
-            msiexec='msiexec /i ' if msiexec else '',
-            cached_pkg=cached_pkg,
-            install_flags=install_flags
-        )
-        __salt__['cmd.run'](cmd, output_loglevel='trace')
+
+        cmd = []
+        if msiexec:
+            cmd.extend('msiexec', '/i')
+        cmd.append(cached_pkg)
+        cmd.extend(install_flags.split())
+
+        __salt__['cmd.run'](cmd, output_loglevel='trace', python_shell=False)
 
     __context__.pop('pkg.list_pkgs', None)
     new = list_pkgs()
@@ -662,11 +654,19 @@ def remove(name=None, pkgs=None, version=None, extra_uninstall_flags=None, **kwa
         if not os.path.exists(os.path.expandvars(cached_pkg)) \
                 and '(x86)' in cached_pkg:
             cached_pkg = cached_pkg.replace('(x86)', '')
-        cmd = '"' + str(os.path.expandvars(
-            cached_pkg)) + '"' + str(pkginfo[version].get('uninstall_flags', '') + " " + (extra_uninstall_flags or ''))
+
+        expanded_cached_pkg = str(os.path.expandvars(cached_pkg))
+        uninstall_flags = str(pkginfo[version].get('uninstall_flags', ''))
+
+        cmd = []
         if pkginfo[version].get('msiexec'):
-            cmd = 'msiexec /x ' + cmd
-        __salt__['cmd.run'](cmd, output_loglevel='trace')
+            cmd.extend(['msiexec', '/x'])
+        cmd.append(expanded_cached_pkg)
+        cmd.extend(uninstall_flags.split())
+        if extra_uninstall_flags:
+            cmd.extend(str(extra_uninstall_flags).split())
+
+        __salt__['cmd.run'](cmd, output_loglevel='trace', python_shell=False)
 
     __context__.pop('pkg.list_pkgs', None)
     new = list_pkgs()
@@ -768,6 +768,5 @@ def _reverse_cmp_pkg_versions(pkg1, pkg2):
 
 def _get_latest_pkg_version(pkginfo):
     if len(pkginfo) == 1:
-        return pkginfo.keys().pop()
-    pkgkeys = pkginfo.keys()
-    return sorted(pkgkeys, cmp=_reverse_cmp_pkg_versions).pop()
+        return pkginfo.iterkeys().next()
+    return sorted(pkginfo, cmp=_reverse_cmp_pkg_versions).pop()

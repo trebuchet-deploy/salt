@@ -2,6 +2,7 @@
 '''
 Module for managing locales on POSIX-like systems.
 '''
+from __future__ import absolute_import
 
 # Import python libs
 import logging
@@ -9,6 +10,7 @@ import re
 
 # Import salt libs
 import salt.utils
+import salt.ext.six as six
 
 log = logging.getLogger(__name__)
 
@@ -62,9 +64,9 @@ def _localectl_set(locale=''):
     locale_params = _parse_localectl()
     locale_params['LANG'] = str(locale)
     args = ' '.join(['{0}="{1}"'.format(k, v)
-                     for k, v in locale_params.iteritems()])
+                     for k, v in six.iteritems(locale_params)])
     cmd = 'localectl set-locale {0}'.format(args)
-    return __salt__['cmd.retcode'](cmd) == 0
+    return __salt__['cmd.retcode'](cmd, python_shell=False) == 0
 
 
 def list_avail():
@@ -125,26 +127,29 @@ def set_locale(locale):
         __salt__['file.sed'](
             '/etc/sysconfig/i18n', '^LANG=.*', 'LANG="{0}"'.format(locale)
         )
-        __salt__['cmd.run'](
-            'grep "^LANG=" /etc/sysconfig/i18n || echo "\nLANG={0}" '
-            '>> /etc/sysconfig/i18n'.format(locale)
-        )
+        if __salt__['cmd.retcode']('grep "^LANG=" /etc/sysconfig/i18n') != 0:
+            __salt__['file.append']('/etc/sysconfig/i18n',
+                                    '"\nLANG={0}"'.format(locale))
     elif 'Debian' in __grains__['os_family']:
         __salt__['file.sed'](
             '/etc/default/locale', '^LANG=.*', 'LANG="{0}"'.format(locale)
         )
-        __salt__['cmd.run'](
-            'grep "^LANG=" /etc/default/locale || '
-            'echo "\nLANG={0}" >> /etc/default/locale'.format(locale)
-        )
+        if __salt__['cmd.retcode']('grep "^LANG=" /etc/default/locale') != 0:
+            __salt__['file.append']('/etc/default/locale',
+                                    '"\nLANG={0}"'.format(locale))
     elif 'Gentoo' in __grains__['os_family']:
         cmd = 'eselect --brief locale set {0}'.format(locale)
-        return __salt__['cmd.retcode'](cmd) == 0
+        return __salt__['cmd.retcode'](cmd, python_shell=False) == 0
 
     return True
 
 
 def _normalize_locale(locale):
+    # depending on the environment, the provided locale will also contain a charmap
+    # (e.g. 'en_US.UTF-8 UTF-8' instead of only the locale 'en_US.UTF-8')
+    # drop the charmap
+    locale = locale.split()[0]
+
     lang_encoding = locale.split('.')
     lang_split = lang_encoding[0].split('_')
     if len(lang_split) > 1:
@@ -158,7 +163,9 @@ def _normalize_locale(locale):
 
 def avail(locale):
     '''
-    Check if a locale is available
+    Check if a locale is available.
+
+    .. versionadded:: 2014.7.0
 
     CLI Example:
 
@@ -175,7 +182,9 @@ def avail(locale):
 
 def gen_locale(locale):
     '''
-    Generate a locale
+    Generate a locale.
+
+    .. versionadded:: 2014.7.0
 
     CLI Example:
 
@@ -183,16 +192,43 @@ def gen_locale(locale):
 
         salt '*' locale.gen_locale 'en_US.UTF-8'
     '''
-    if __grains__.get('os') == 'Debian':
+    # validate the supplied locale
+    valid = __salt__['file.replace'](
+        '/usr/share/i18n/SUPPORTED',
+        '^{0}$'.format(locale),
+        '^{0}$'.format(locale),
+        search_only=True
+    )
+    if not valid:
+        log.error('The provided locale "{0}" is invalid'.format(locale))
+        return False
+
+    if __grains__.get('os') == 'Debian' or __grains__.get('os_family') == 'Gentoo':
         __salt__['file.replace'](
             '/etc/locale.gen',
             '# {0} '.format(locale),
             '{0} '.format(locale),
             append_if_not_found=True
         )
+    elif __grains__.get('os') == 'Ubuntu':
+        __salt__['file.touch'](
+            '/var/lib/locales/supported.d/{0}'.format(locale.split('_')[0])
+        )
+        __salt__['file.append'](
+            '/var/lib/locales/supported.d/{0}'.format(locale.split('_')[0]),
+            '{0} {1}'.format(locale, locale.split('.')[1])
+        )
+        return __salt__['cmd.retcode'](
+            'locale-gen'
+        )
 
-    __salt__['cmd.run'](
-        'locale-gen {0}'.format(locale)
-    )
-
-    return True
+    if __grains__.get('os_family') == 'Gentoo':
+        return __salt__['cmd.retcode'](
+            'locale-gen --generate "{0}"'.format(locale),
+            python_shell=False
+        )
+    else:
+        return __salt__['cmd.retcode'](
+            'locale-gen "{0}"'.format(locale),
+            python_shell=False
+        )

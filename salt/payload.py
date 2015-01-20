@@ -6,12 +6,14 @@ in here
 '''
 
 # Import python libs
-#import sys  # Use of sys is commented out below
+from __future__ import absolute_import
 import logging
+import gc
 
 # Import salt libs
 import salt.log
-import salt.crypt
+import salt.ext.six as six
+
 from salt.exceptions import SaltReqTimeoutError
 
 # Import third party libs
@@ -42,7 +44,7 @@ except ImportError:
         log.fatal('Unable to import msgpack or msgpack_pure python modules')
         # Don't exit if msgpack is not available, this is to make local mode
         # work without msgpack
-        #sys.exit(salt.exitcodes.EX_GENERIC)
+        #sys.exit(salt.defaults.exitcodes.EX_GENERIC)
 
 
 def package(payload):
@@ -91,13 +93,15 @@ class Serial(object):
         Run the correct loads serialization format
         '''
         try:
+            gc.disable()  # performance optimization for msgpack
             return msgpack.loads(msg, use_list=True)
         except Exception as exc:
             log.critical('Could not deserialize msgpack message: {0}'
-                         'In an attempt to keep Salt running, returning an empty dict.'
                          'This often happens when trying to read a file not in binary mode.'
                          'Please open an issue and include the following error: {1}'.format(msg, exc))
-            return {}
+            raise
+        finally:
+            gc.enable()
 
     def load(self, fn_):
         '''
@@ -127,7 +131,7 @@ class Serial(object):
             # list/tuple
             def odict_encoder(obj):
                 if isinstance(obj, dict):
-                    for key, value in obj.copy().iteritems():
+                    for key, value in six.iteritems(obj.copy()):
                         obj[key] = odict_encoder(value)
                     return dict(obj)
                 elif isinstance(obj, (list, tuple)):
@@ -175,9 +179,12 @@ class SREQ(object):
                     zmq.RECONNECT_IVL_MAX, 5000
                 )
 
-            if self.master.startswith('tcp://') and hasattr(zmq, 'IPV4ONLY'):
-                # IPv6 sockets work for both IPv6 and IPv4 addresses
-                self._socket.setsockopt(zmq.IPV4ONLY, 0)
+            if self.master.startswith('tcp://['):
+                # Hint PF type if bracket enclosed IPv6 address
+                if hasattr(zmq, 'IPV6'):
+                    self._socket.setsockopt(zmq.IPV6, 1)
+                elif hasattr(zmq, 'IPV4ONLY'):
+                    self._socket.setsockopt(zmq.IPV4ONLY, 0)
             self._socket.linger = self.linger
             if self.id_:
                 self._socket.setsockopt(zmq.IDENTITY, self.id_)

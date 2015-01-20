@@ -2,6 +2,7 @@
 '''
 File server pluggable modules and generic backend functions
 '''
+from __future__ import absolute_import
 
 # Import python libs
 import errno
@@ -14,6 +15,7 @@ import time
 # Import salt libs
 import salt.loader
 import salt.utils
+import salt.ext.six as six
 
 log = logging.getLogger(__name__)
 
@@ -170,7 +172,7 @@ def generate_mtime_map(path_map):
     Generate a dict of filename -> mtime
     '''
     file_map = {}
-    for saltenv, path_list in path_map.iteritems():
+    for saltenv, path_list in six.iteritems(path_map):
         for path in path_list:
             for directory, dirnames, filenames in os.walk(path):
                 for item in filenames:
@@ -190,11 +192,6 @@ def diff_mtime_map(map1, map2):
     '''
     Is there a change to the mtime map? return a boolean
     '''
-    # check if the file lists are different
-    if cmp(sorted(map1.keys()), sorted(map2.keys())) != 0:
-        #log.debug('diff_mtime_map: the keys are different')
-        return True
-
     # check if the mtimes are the same
     if cmp(sorted(map1), sorted(map2)) != 0:
         #log.debug('diff_mtime_map: the maps are different')
@@ -308,7 +305,7 @@ class Fileserver(object):
         for fsb in back:
             fstr = '{0}.update'.format(fsb)
             if fstr in self.servers:
-                #log.debug('Updating fileserver cache')
+                log.debug('Updating fileserver cache')
                 self.servers[fstr]()
 
     def envs(self, back=None, sources=False):
@@ -551,6 +548,7 @@ class FSChan(object):
         self.fs = Fileserver(self.opts)
         self.fs.init()
         self.fs.update()
+        self.cmd_stub = {'ext_nodes': {}}
 
     def send(self, load, tries=None, timeout=None):
         '''
@@ -560,6 +558,10 @@ class FSChan(object):
             log.error('Malformed request, no cmd: {0}'.format(load))
             return {}
         cmd = load['cmd'].lstrip('_')
+        if cmd in self.cmd_stub:
+            return self.cmd_stub[cmd]
+        if cmd == 'file_envs':
+            return self.fs.envs()
         if not hasattr(self.fs, cmd):
             log.error('Malformed request, invalid cmd: {0}'.format(load))
             return {}

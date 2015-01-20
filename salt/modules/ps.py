@@ -6,6 +6,7 @@ See http://code.google.com/p/psutil.
 :depends:   - psutil Python module, version 0.3.0 or later
             - python-utmp package (optional)
 '''
+from __future__ import absolute_import
 
 # Import python libs
 import time
@@ -91,7 +92,7 @@ def _get_proc_pid(proc):
 
     It's backward compatible with < 2.0 versions of psutil.
     '''
-    return proc.pid() if PSUTIL2 else proc.pid
+    return proc.pid
 
 
 def top(num_processes=5, interval=3):
@@ -163,6 +164,32 @@ def get_pid_list():
         salt '*' ps.get_pid_list
     '''
     return psutil.get_pid_list()
+
+
+def proc_info(pid, attrs=None):
+    '''
+    Return a dictionary of information for a process id (PID).
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt '*' ps.proc_info 2322
+        salt '*' ps.proc_info 2322 attrs='["pid", "name"]'
+
+    pid
+        PID of process to query.
+
+    attrs
+        Optional list of desired process attributes.  The list of possible
+        attributes can be found here:
+        http://pythonhosted.org/psutil/#psutil.Process
+    '''
+    try:
+        proc = psutil.Process(pid)
+        return proc.as_dict(attrs)
+    except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError) as exc:
+        raise CommandExecutionError(exc)
 
 
 def kill_pid(pid, signal=15):
@@ -583,18 +610,3 @@ def get_users():
                                    'started': started, 'host': rec[5]})
         except ImportError:
             return False
-
-# This is a possible last ditch method
-# result = []
-#        w = __salt__['cmd.run'](
-#            'who', env='{"LC_ALL": "en_US.UTF-8"}').splitlines()
-#        for u in w:
-#            u = u.split()
-#            started = __salt__['cmd.run'](
-#                'date --d "{0} {1}" +%s'.format(u[2], u[3])).strip()
-#            rec = {'name': u[0], 'terminal': u[1],
-#                   'started': started, 'host': None}
-#            if len(u) > 4:
-#                rec['host'] = u[4][1:-1]
-#            result.append(rec)
-#        return result
